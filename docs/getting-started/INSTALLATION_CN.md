@@ -9,7 +9,7 @@
 | 在 Windows 电脑上自用 | Docker Desktop 一键安装 | [Windows 安装](../deployment/WINDOWS_INSTALLATION_CN.md) |
 | 在 Linux 工作站或 macOS 上自用 | Docker 一键安装 | [Linux 与 macOS 安装](../deployment/LINUX_MACOS_INSTALLATION_CN.md) |
 | 部署到公网云服务器 | Ubuntu/Debian + Docker + HTTPS | [云服务器部署](../deployment/CLOUD_DEPLOYMENT_CN.md) |
-| 部署到阿里云 ECS | 本 fork 的 install.sh + 本地镜像推 ACR + ECS 拉取 | [阿里云 ECS 部署（Fork + ACR）](../deployment/ALIYUN_ECS_DEPLOYMENT_CN.md) |
+| 部署到阿里云 ECS | ECS 上 curl/clone 本 fork；业务镜像本机推 ACR 后拉取 | [阿里云 ECS 部署（Fork + ACR）](../deployment/ALIYUN_ECS_DEPLOYMENT_CN.md) |
 | 运营多用户 SaaS | 生产部署 + 注册、邮件、支付和监控 | [SaaS 部署](../deployment/SAAS_DEPLOYMENT_CN.md) |
 | 使用手机访问或构建 App | H5、Android 或 iOS 客户端 | [移动端部署](../deployment/MOBILE_CLIENT_DEPLOYMENT_CN.md) |
 | 从 AWS Marketplace 部署 | Marketplace 镜像 | [AWS Marketplace](../deployment/AWS_MARKETPLACE_DEPLOYMENT_CN.md) |
