@@ -1,31 +1,41 @@
 # QuantDinger 阿里云 ECS 部署指南（Fork + ACR）
 
-本文面向在阿里云 ECS 上自托管 **本仓库 fork**（`jinweiyang126-code/QuantDinger`）的场景：本机构建业务镜像并推送到**阿里云容器镜像服务 ACR**，再在 ECS 上用本 fork 的 `install.sh` 拉起 Compose 栈。
+本文面向在阿里云 ECS 上自托管 **本仓库 fork**（`jinweiyang126-code/QuantDinger`）的场景：**业务 Docker 镜像走阿里云 ACR**；安装用的 `install.sh` / Compose / `.env` 模板用本机打包上传（或 OSS），**不要指望从 ACR 里 curl 安装脚本**。
 
 通用 Nginx / HTTPS 细节仍可参考 [云服务器部署指南](CLOUD_DEPLOYMENT_CN.md)。安装方式总览见 [安装与部署总览](../getting-started/INSTALLATION_CN.md)。
 
 > 明确启用实盘后可能提交真实订单。请先从研究、回测和 `signal` 模式开始。本项目不提供投资建议。
 
+## 先分清两件事
+
+| 东西 | 放哪里 | 说明 |
+| --- | --- | --- |
+| **业务镜像**（backend / frontend / mobile） | **阿里云 ACR** | `docker push` / `docker pull` |
+| **安装文件**（`install.sh`、`docker-compose.ghcr.yml`、`.env.example`、`bootstrap_env.py`） | **本机 → scp/OSS → ECS** | 普通文件，不是容器镜像；ACR **不能**当 raw 脚本源来用 |
+
+推荐主路径**不依赖** ECS 访问 GitHub：开发机打好安装包上传到 ECS，容器只从 ACR 拉取。
+
 ## 部署架构
 
 ```text
-开发机（本地）
-  ├─ 构建 backend / frontend / mobile 镜像
-  └─ docker push → 阿里云 ACR
-        ↓
+开发机（本地仓库 jinweiyang126-code/QuantDinger）
+  ├─ docker build + push  →  阿里云 ACR（业务镜像）
+  └─ 打包 install 文件     →  scp / 阿里云 OSS  →  ECS
+                                              ↓
 阿里云 ECS
-  ├─ curl 本 fork 的 install.sh（下载 compose + .env 模板）
-  ├─ .env 中 BACKEND_IMAGE / FRONTEND_IMAGE / MOBILE_IMAGE 指向 ACR
-  └─ docker compose pull && up -d
+  ├─ 解压安装包，配置 .env（*_IMAGE 指向 ACR）
+  ├─ docker login ACR
+  └─ docker compose pull && up -d   ← 镜像只从 ACR 拉
 ```
 
-| 组件 | 镜像来源 |
+| 组件 | 来源 |
 | --- | --- |
-| `quantdinger-backend` | 本机构建 → 推送到 ACR |
-| `quantdinger-frontend` | 本机构建 → 推送到 ACR（源码在独立 Vue 仓库） |
-| `quantdinger-mobile` | 本机构建 → 推送到 ACR（源码在独立 Mobile 仓库） |
+| `quantdinger-backend` | 本机构建 → **ACR** |
+| `quantdinger-frontend` | 本机构建 → **ACR**（源码在独立 Vue 仓库） |
+| `quantdinger-mobile` | 本机构建 → **ACR**（源码在独立 Mobile 仓库） |
 | Postgres / Redis | Docker Hub 或国内镜像加速（`IMAGE_PREFIX`） |
 | Kafka | Compose 默认镜像（可按需改 `KAFKA_IMAGE`） |
+| `install.sh` / compose / `.env` | 本机上传，**不是** ACR |
 
 本流程**不再依赖** `ghcr.io/openbyteinc/...` 业务镜像。
 
@@ -159,48 +169,71 @@ ss -tulnp | awk 'NR>1 {print $5}' | grep -oE '[0-9]+$' | sort -un
 | Web `8888` | `18888` |
 | Redis 映射 `6379` | `16379`（`REDIS_BIND=127.0.0.1:16379`） |
 
-## 5. 使用本 Fork 的 install.sh 一键安装
+## 5. 在 ECS 上安装（推荐：本机打包上传，镜像走 ACR）
 
-**使用 `jinweiyang126-code/QuantDinger` 的安装脚本**（不要用 OpenByteInc 官方 raw 地址）：
+### 5.1 开发机打包安装文件
+
+在本地 `QuantDinger` 仓库目录执行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jinweiyang126-code/QuantDinger/main/install.sh \
-  | bash -s -- ~/quantdinger
+cd /path/to/QuantDinger
+mkdir -p /tmp/quantdinger-install/scripts
+cp install.sh docker-compose.ghcr.yml .env.example /tmp/quantdinger-install/
+cp scripts/bootstrap_env.py /tmp/quantdinger-install/scripts/
+# Windows PowerShell 可用 Copy-Item 等价操作后打 zip
+cd /tmp
+tar czf quantdinger-install.tgz quantdinger-install
 ```
 
-脚本会：
-
-1. 从本 fork 下载 `docker-compose.ghcr.yml`（保存为安装目录下的 `docker-compose.yml`）与 `.env.example`
-2. 交互设置管理员账号、端口等
-3. 执行 `docker compose pull` / `up -d`
-
-也可显式指定 raw 源：
+上传到 ECS（任选其一）：
 
 ```bash
-export QUANTDINGER_GITHUB_RAW=https://raw.githubusercontent.com/jinweiyang126-code/QuantDinger/main
-curl -fsSL "${QUANTDINGER_GITHUB_RAW}/install.sh" | bash -s -- ~/quantdinger
+# scp
+scp quantdinger-install.tgz root@你的ECS公网IP:~/
+
+# 或上传到阿里云 OSS 后，在 ECS：
+# wget https://你的bucket.oss-cn-xxx.aliyuncs.com/quantdinger-install.tgz -O ~/quantdinger-install.tgz
 ```
 
-> 若 GitHub raw 在 ECS 上超时：在能访问 GitHub 的机器下载 `install.sh`、`docker-compose.ghcr.yml`、`.env.example`、`scripts/bootstrap_env.py` 后上传到 ECS，再本地执行（见第 5.2 节）。
-
-### 5.1 安装后立刻改成 ACR 镜像
+### 5.2 ECS 解压并准备目录
 
 ```bash
+cd ~
+tar xzf quantdinger-install.tgz
+mkdir -p ~/quantdinger/scripts
+cp ~/quantdinger-install/docker-compose.ghcr.yml ~/quantdinger/docker-compose.yml
+cp ~/quantdinger-install/.env.example ~/quantdinger/.env.example
+cp ~/quantdinger-install/scripts/bootstrap_env.py ~/quantdinger/scripts/
+cp ~/quantdinger-install/install.sh ~/quantdinger/
 cd ~/quantdinger
+```
+
+生成 `.env`（交互式可用本地 `install.sh`；或直接 bootstrap）：
+
+```bash
+# 方式 A：本地执行已上传的 install.sh（它会再尝试联网下载文件；
+# 若 ECS 访问不了 GitHub，请改用方式 B，不要依赖 curl raw.githubusercontent.com）
+# bash ./install.sh ~/quantdinger
+
+# 方式 B（推荐，纯离线配置文件）：
+python3 scripts/bootstrap_env.py --compose-file docker-compose.yml
+```
+
+### 5.3 配置 `.env`：业务镜像全部指向 ACR
+
+```bash
 cp -a .env .env.bak.$(date +%Y%m%d%H%M%S)
 nano .env
 ```
 
-写入（按实际替换）：
-
 ```ini
-# ---- 业务镜像：阿里云 ACR ----
+# ---- 业务镜像：只从阿里云 ACR 拉取（这才是 ACR 的用途）----
 BACKEND_IMAGE=<registry-id>-registry.cn-<region>.cr.aliyuncs.com/quantdinger/quantdinger-backend
 FRONTEND_IMAGE=<registry-id>-registry.cn-<region>.cr.aliyuncs.com/quantdinger/quantdinger-frontend
 MOBILE_IMAGE=<registry-id>-registry.cn-<region>.cr.aliyuncs.com/quantdinger/quantdinger-mobile
 IMAGE_TAG=1.0.0
 
-# ---- 基础镜像加速（Postgres / Redis）----
+# ---- 基础镜像加速（Postgres / Redis，不是业务镜像）----
 IMAGE_PREFIX=docker.m.daocloud.io/library/
 
 # ---- 访问地址与端口（按冲突情况调整）----
@@ -212,41 +245,34 @@ BACKEND_PORT=127.0.0.1:5000
 REDIS_BIND=127.0.0.1:16379
 FRONTEND_URL=http://你的公网IP:18888
 
+ADMIN_USER=your_admin_user
+ADMIN_PASSWORD=your_strong_password
 # 管理员仅首次初始化需要；已有数据卷后不要随意更换 POSTGRES_PASSWORD
 ```
 
-然后重新拉取并启动：
+### 5.4 从 ACR 拉镜像并启动
 
 ```bash
+docker login "${ACR_HOST}"
 docker compose -f docker-compose.yml pull
-docker compose -f docker-compose.yml up -d --force-recreate
+docker compose -f docker-compose.yml up -d
 docker compose -f docker-compose.yml ps
 curl -fsS http://127.0.0.1:5000/api/health
 ```
 
 浏览器访问：`http://你的公网IP:18888`（或你设置的 `FRONTEND_PORT`）。安全组放行对应端口（可限制为办公 IP）。
 
-### 5.2 手动安装（不用管道执行 install.sh）
+### 5.5 可选：仍用 GitHub raw（不推荐作主路径）
+
+仅当 ECS 能稳定访问 GitHub、且你接受安装文件不走 ACR 时：
 
 ```bash
-mkdir -p ~/quantdinger/scripts
-cd ~/quantdinger
-
-# 从本 fork 获取文件（或 scp 上传）
-curl -fsSL -o docker-compose.yml \
-  https://raw.githubusercontent.com/jinweiyang126-code/QuantDinger/main/docker-compose.ghcr.yml
-curl -fsSL -o .env.example \
-  https://raw.githubusercontent.com/jinweiyang126-code/QuantDinger/main/.env.example
-curl -fsSL -o scripts/bootstrap_env.py \
-  https://raw.githubusercontent.com/jinweiyang126-code/QuantDinger/main/scripts/bootstrap_env.py
-
-python3 scripts/bootstrap_env.py --compose-file docker-compose.yml
-# 编辑 .env：ADMIN_*、FRONTEND_*、BACKEND_IMAGE / FRONTEND_IMAGE / MOBILE_IMAGE、IMAGE_TAG、IMAGE_PREFIX
-
-docker login "${ACR_HOST}"
-docker compose -f docker-compose.yml pull
-docker compose -f docker-compose.yml up -d
+curl -fsSL https://raw.githubusercontent.com/jinweiyang126-code/QuantDinger/main/install.sh \
+  | bash -s -- ~/quantdinger
 ```
+
+装完后仍须按 **5.3** 把 `*_IMAGE` 改成 ACR，再 `pull` / `up -d`。  
+**ACR 不会提供这个 curl 地址**；GitHub 只提供安装脚本文本，和镜像仓库是两回事。
 
 ## 6. 有域名后的生产配置
 
@@ -301,20 +327,20 @@ python3 scripts/bootstrap_env.py --compose-file docker-compose.yml
 
 | 现象 | 处理 |
 | --- | --- |
-| `install.sh` 仍拉到官方配置 | 确认 curl 的是 `jinweiyang126-code/QuantDinger`；脚本内 `GITHUB_RAW` 已默认指向本 fork |
+| 以为要用 ACR 的 URL 跑 `curl install.sh` | ACR 只存镜像；安装文件用 **5.1/5.2 本机上传** |
 | `pull` 业务镜像 401/403 | ECS 上重新 `docker login` ACR；检查仓库权限 |
 | 拉到的仍是 GHCR 镜像 | `.env` 未设置或未生效 `BACKEND_IMAGE` 等，改完后 `up -d --force-recreate` |
 | 端口被占 | 改 `FRONTEND_PORT` / `REDIS_BIND`，安全组同步放行 |
 | 内存不足 | 停掉同机其他容器（如 nautilus、new-api）；或升到 8C16G |
-| GitHub raw 超时 | 本机下载安装文件后 scp 到 ECS，走第 5.2 节 |
+| ECS 访问不了 GitHub | 不要用 raw curl；按第 5 节 scp/OSS 上传安装包 |
 
 ## 10. 检查清单
 
-- [ ] 本机已将 backend / frontend / mobile 推送到 ACR  
+- [ ] 本机已将 backend / frontend / mobile 推送到 **ACR**  
+- [ ] 安装包（compose / `.env.example` / `bootstrap_env.py` 等）已 **scp/OSS** 到 ECS  
 - [ ] ECS ≥ 4C8G，Docker / Compose v2 可用  
 - [ ] ECS 已 `docker login` ACR  
-- [ ] 使用 **本 fork** 的 `install.sh` 或手动文件完成安装  
-- [ ] `.env` 中 `*_IMAGE` 指向 ACR，`IMAGE_TAG` 正确  
+- [ ] `.env` 中 `*_IMAGE` 全部指向 ACR，`IMAGE_TAG` 正确  
 - [ ] 端口与安全组无冲突  
 - [ ] `/api/health` 正常，Web 可登录  
 - [ ] 已备份 `.env` 与数据卷  
