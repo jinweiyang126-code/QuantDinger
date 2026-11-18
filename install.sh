@@ -2,15 +2,16 @@
 #
 # QuantDinger interactive installer for Linux and macOS.
 #
-# Usage:
-#   curl -fsSL https://raw.githubusercontent.com/OpenByteInc/QuantDinger/main/install.sh | bash
+# Usage (this fork):
+#   curl -fsSL https://raw.githubusercontent.com/jinweiyang126-code/QuantDinger/main/install.sh | bash
 #
 # Custom install directory:
-#   curl -fsSL https://raw.githubusercontent.com/OpenByteInc/QuantDinger/main/install.sh | bash -s -- /opt/quantdinger
+#   curl -fsSL https://raw.githubusercontent.com/jinweiyang126-code/QuantDinger/main/install.sh | bash -s -- /opt/quantdinger
 #
 # Optional environment overrides:
 #   QUANTDINGER_INSTALL_REF=main
 #   QUANTDINGER_INSTALL_DIR=/opt/quantdinger
+#   QUANTDINGER_GITHUB_RAW=https://raw.githubusercontent.com/jinweiyang126-code/QuantDinger/main
 #
 
 set -eu
@@ -33,7 +34,9 @@ fi
 
 INSTALL_DIR="${1:-${QUANTDINGER_INSTALL_DIR:-$HOME/quantdinger}}"
 INSTALL_REF="${QUANTDINGER_INSTALL_REF:-main}"
-GITHUB_RAW="https://raw.githubusercontent.com/OpenByteInc/QuantDinger/${INSTALL_REF}"
+# Default to this fork so install.sh / compose / .env.example stay in sync.
+# Override with QUANTDINGER_GITHUB_RAW when mirroring or pinning another raw base.
+GITHUB_RAW="${QUANTDINGER_GITHUB_RAW:-https://raw.githubusercontent.com/jinweiyang126-code/QuantDinger/${INSTALL_REF}}"
 COMPOSE_FILE="docker-compose.yml"
 ENV_FILE=".env"
 ENV_TEMPLATE=".env.example"

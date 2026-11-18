@@ -27,6 +27,7 @@ AI-agent access. This documentation describes the current v5 release.
 | Upgrade or move an instance | [Upgrade and rollback](deployment/UPGRADE_ROLLBACK.md) | [Backup, restore, and migration](deployment/BACKUP_RESTORE_MIGRATION.md) |
 | Diagnose a problem | [Error knowledge base](deployment/ERROR_KNOWLEDGE_BASE.md) | [Installation troubleshooting](deployment/INSTALL_TROUBLESHOOTING.md) |
 | Deploy from AWS Marketplace | [English](deployment/AWS_MARKETPLACE_DEPLOYMENT.md) | [简体中文](deployment/AWS_MARKETPLACE_DEPLOYMENT_CN.md) |
+| Deploy on Alibaba Cloud ECS | [简体中文](deployment/ALIYUN_ECS_DEPLOYMENT_CN.md) | [Cloud deployment (generic)](deployment/CLOUD_DEPLOYMENT_CN.md) |
 | Release or scale runtime workers | [Distributed runtime scaling](deployment/DISTRIBUTED_RUNTIME_SCALING.md) | [V6 capacity plan](architecture/V6_HYPERSCALE_ARCHITECTURE_PLAN.md) |
 | Connect an AI agent | [MCP setup](agent/MCP_SETUP.md) | [Agent Gateway quickstart](agent/AGENT_QUICKSTART.md) |
 | Integrate over HTTP | [Human OpenAPI](api/README.md) | [API conventions](architecture/API_CONVENTIONS.md) |

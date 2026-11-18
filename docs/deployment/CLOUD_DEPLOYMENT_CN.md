@@ -2,6 +2,8 @@
 
 本文说明当前版本 QuantDinger 在云服务器上的 Docker 部署方式，覆盖推荐的 GHCR 预构建镜像部署、可选源码部署、Nginx、HTTPS、升级和常见排错。
 
+若目标环境是**阿里云 ECS**（含 Alibaba Cloud Linux 3、国内镜像加速与安全组建议），请优先阅读 [阿里云 ECS 部署指南](ALIYUN_ECS_DEPLOYMENT_CN.md)；本文保留通用云主机步骤与完整 Nginx 示例。
+
 首次安装时如果遇到 Docker 拉镜像或 Postgres 启动问题，也请参考 [安装排错指南](INSTALL_TROUBLESHOOTING_CN.md)。
 
 ## 推荐架构
