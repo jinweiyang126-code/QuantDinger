@@ -56,23 +56,22 @@
 ## 2. 准备阿里云 ACR
 
 1. 开通 [容器镜像服务 ACR](https://cr.console.aliyun.com/)，创建实例（个人版即可起步）。
-2. 创建命名空间，例如：`quantdinger`。
-3. 创建仓库（或推送时自动创建）：
-   - `quantdinger-backend`
-   - `quantdinger-frontend`
-   - `quantdinger-mobile`
-4. 记录登录地址，形如：
+2. 创建命名空间与**一个**仓库即可，例如命名空间 `quantdinger-acr`、仓库 `quantdinger-acr`（用不同 tag 区分 backend / frontend / mobile）。
+3. 记录登录地址。个人版常见形如：
 
 ```text
-<registry-id>-registry.cn-<region>.cr.aliyuncs.com
+crpi-xxxx.ap-southeast-1.personal.cr.aliyuncs.com
 ```
 
-下文用占位符：
+下文用占位符（与当前实测一致）：
 
 ```text
-ACR_HOST=<registry-id>-registry.cn-<region>.cr.aliyuncs.com
-ACR_NS=quantdinger
-IMAGE_TAG=1.0.0
+ACR_HOST=crpi-xxxx.ap-southeast-1.personal.cr.aliyuncs.com
+ACR_REPO=quantdinger-acr/quantdinger-acr
+# 单仓库多 tag
+BACKEND_TAG=backend-1.0.0
+FRONTEND_TAG=frontend-1.0.0
+MOBILE_TAG=mobile-1.0.0
 ```
 
 开发机与 ECS 都需要能登录 ACR：
@@ -84,66 +83,39 @@ docker login "${ACR_HOST}"
 
 ## 3. 本机构建并推送到 ACR
 
-在开发机克隆本 fork（已含后端与 Compose）：
+在开发机准备三个源码目录（本 fork + Vue + Mobile）：
 
 ```bash
 git clone https://github.com/jinweiyang126-code/QuantDinger.git
-cd QuantDinger
+# Vue / Mobile 另 clone 到同级或指定路径
 ```
 
-### 3.1 构建 Backend
+国内构建可设 `BUILD_REGION=cn`（backend Dockerfile 会走国内 apt 源）。
+
+### 3.1 构建并推送（单仓库多 tag）
 
 ```bash
-docker build -t "${ACR_HOST}/${ACR_NS}/quantdinger-backend:${IMAGE_TAG}" \
-  -f backend_api_python/Dockerfile \
-  backend_api_python
+# Backend
+docker build --build-arg BUILD_REGION=cn \
+  -t "${ACR_HOST}/${ACR_REPO}:${BACKEND_TAG}" \
+  -f QuantDinger/backend_api_python/Dockerfile \
+  QuantDinger/backend_api_python
+docker push "${ACR_HOST}/${ACR_REPO}:${BACKEND_TAG}"
 
-docker push "${ACR_HOST}/${ACR_NS}/quantdinger-backend:${IMAGE_TAG}"
+# Frontend
+docker build -t "${ACR_HOST}/${ACR_REPO}:${FRONTEND_TAG}" \
+  -f QuantDinger-Vue/Dockerfile QuantDinger-Vue
+docker push "${ACR_HOST}/${ACR_REPO}:${FRONTEND_TAG}"
+
+# Mobile
+docker build -t "${ACR_HOST}/${ACR_REPO}:${MOBILE_TAG}" \
+  -f QuantDinger-Mobile/Dockerfile QuantDinger-Mobile
+docker push "${ACR_HOST}/${ACR_REPO}:${MOBILE_TAG}"
 ```
 
-### 3.2 构建 Frontend / Mobile
+也可先用 compose build 覆盖编本地 tag，再 `docker tag` / `push` 到 ACR。
 
-前端与移动端源码不在本仓库内，需另备 `QuantDinger-Vue`、`QuantDinger-Mobile`（或你们自己的前端工程），目录中需有 `Dockerfile`。
-
-```bash
-# 将 Vue / Mobile 源码放到同级或指定路径后：
-git clone <你的-Vue仓库> ./QuantDinger-Vue
-git clone <你的-Mobile仓库> ./QuantDinger-Mobile
-
-docker build -t "${ACR_HOST}/${ACR_NS}/quantdinger-frontend:${IMAGE_TAG}" \
-  -f QuantDinger-Vue/Dockerfile \
-  QuantDinger-Vue
-
-docker build -t "${ACR_HOST}/${ACR_NS}/quantdinger-mobile:${IMAGE_TAG}" \
-  -f QuantDinger-Mobile/Dockerfile \
-  QuantDinger-Mobile
-
-docker push "${ACR_HOST}/${ACR_NS}/quantdinger-frontend:${IMAGE_TAG}"
-docker push "${ACR_HOST}/${ACR_NS}/quantdinger-mobile:${IMAGE_TAG}"
-```
-
-也可使用仓库自带的 build 覆盖文件在本地先编再打 tag：
-
-```bash
-# 需已存在 ./QuantDinger-Vue 与 ./QuantDinger-Mobile
-docker compose -f docker-compose.yml -f docker-compose.build.yml build frontend mobile
-docker tag quantdinger-frontend:local "${ACR_HOST}/${ACR_NS}/quantdinger-frontend:${IMAGE_TAG}"
-docker tag quantdinger-mobile:local   "${ACR_HOST}/${ACR_NS}/quantdinger-mobile:${IMAGE_TAG}"
-docker push "${ACR_HOST}/${ACR_NS}/quantdinger-frontend:${IMAGE_TAG}"
-docker push "${ACR_HOST}/${ACR_NS}/quantdinger-mobile:${IMAGE_TAG}"
-```
-
-> 若暂时没有前端源码：可先仅推送 backend，ECS 上临时仍指向可访问的 frontend/mobile 镜像；生产环境建议三端都进 ACR。
-
-### 3.3 建议同时打 `latest`（可选）
-
-```bash
-for name in quantdinger-backend quantdinger-frontend quantdinger-mobile; do
-  docker tag  "${ACR_HOST}/${ACR_NS}/${name}:${IMAGE_TAG}" "${ACR_HOST}/${ACR_NS}/${name}:latest"
-  docker push "${ACR_HOST}/${ACR_NS}/${name}:latest"
-done
-```
-
+> 三端都进 ACR 后再在 ECS 上把 `.env` 的 `*_IMAGE` / `*_TAG` 全部改掉。
 ## 4. ECS 环境准备（Alibaba Cloud Linux 3）
 
 ```bash
@@ -291,19 +263,13 @@ BACKEND_PORT=127.0.0.1:5000
 
 ## 8. 升级（发新版 ACR 镜像）
 
-本机：
-
-```bash
-# 构建并推送新 IMAGE_TAG，例如 1.0.1
-docker push "${ACR_HOST}/${ACR_NS}/quantdinger-backend:1.0.1"
-# frontend / mobile 同理
-```
+本机推送新 tag，例如 `backend-1.0.1` / `frontend-1.0.1` / `mobile-1.0.1`。
 
 ECS：
 
 ```bash
 cd ~/quantdinger
-# 修改 .env 中 IMAGE_TAG=1.0.1
+# 修改 .env 中 BACKEND_TAG / FRONTEND_TAG / MOBILE_TAG
 docker compose -f docker-compose.yml pull
 docker compose -f docker-compose.yml up -d
 ```
